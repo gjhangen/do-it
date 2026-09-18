@@ -101,8 +101,8 @@ $('#test').onclick=async()=>{
  if(!standalone){$('#notificationStatus').textContent='Open the Home Screen app first.';return}
  if(Notification.permission!=='granted'){const p=await Notification.requestPermission();if(p!=='granted'){return}}
  reg=reg||await navigator.serviceWorker.ready;
- await reg.showNotification('Do It',{body:'This is what your Do It notifications look like.',tag:'do-it-test',icon:'./icon.svg',badge:'./icon.svg',data:{url:'./'}});
- $('#notificationStatus').textContent='Sent.';
+ await reg.showNotification('Do It · Ready',{body:'✓ Connected. I’ll surface what matters here.',tag:'do-it-test',icon:'./icon.svg',badge:'./icon.svg',timestamp:Date.now(),renotify:true,data:{url:'./'}});
+ $('#notificationStatus').textContent='Test notification sent.';
 };
 navigator.serviceWorker?.addEventListener('controllerchange',()=>location.reload());
 render();updateBadge();
