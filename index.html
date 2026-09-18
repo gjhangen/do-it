@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Do It">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <title>Do It</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color-scheme:dark;background:#0a0a0a;color:#f5f5f5}
+    *{box-sizing:border-box} body{margin:0;min-height:100vh;background:#0a0a0a}
+    main{max-width:680px;margin:auto;padding:max(24px,env(safe-area-inset-top)) 18px max(36px,env(safe-area-inset-bottom))}
+    h1{font-size:34px;margin:6px 0 2px;letter-spacing:-1.2px}.sub{color:#8e8e93;margin:0 0 26px}
+    .card{background:#171717;border:1px solid #2b2b2b;border-radius:18px;padding:16px;margin:12px 0}
+    textarea,input{width:100%;border:0;border-radius:14px;background:#242424;color:#fff;padding:14px;font-size:17px;outline:none}
+    textarea{min-height:96px;resize:none} button{border:0;border-radius:13px;padding:12px 15px;font-size:16px;font-weight:650;background:#f5f5f5;color:#111}
+    button.secondary{background:#2a2a2a;color:#fff} button.danger{background:#3b2020;color:#ffb4b4}
+    .row{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.task{display:flex;gap:12px;align-items:flex-start;padding:13px 0;border-bottom:1px solid #2a2a2a}
+    .task:last-child{border-bottom:0}.task .body{flex:1}.task .title{font-size:17px}.task .meta{font-size:13px;color:#8e8e93;margin-top:4px}
+    .empty{color:#8e8e93;padding:6px 0}.status{font-size:14px;color:#a9a9af;margin-top:9px;min-height:20px}
+    .install{display:none}.pill{font-size:12px;background:#272727;border-radius:999px;padding:5px 8px;color:#c7c7cc}
+  </style>
+</head>
+<body><main>
+  <h1>Do It</h1><p class="sub">Capture it. Handle it. Move on.</p>
+
+  <section id="installCard" class="card install">
+    <strong>Put this on your iPhone</strong>
+    <p style="color:#aaa;margin-bottom:8px">Safari → Share → Add to Home Screen → open <b>Do It</b>.</p>
+  </section>
+
+  <section class="card">
+    <textarea id="capture" placeholder="What needs to happen?"></textarea>
+    <div class="row">
+      <button id="add">Add</button>
+      <button id="voice" class="secondary">Speak</button>
+    </div>
+    <div id="captureStatus" class="status"></div>
+  </section>
+
+  <section class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between"><strong>Open</strong><span id="count" class="pill">0</span></div>
+    <div id="tasks"></div>
+  </section>
+
+  <section class="card">
+    <strong>Notifications</strong>
+    <p style="color:#aaa;margin:8px 0 12px">These come from <b>Do It</b>, not ChatGPT.</p>
+    <div class="row">
+      <button id="notify">Enable</button>
+      <button id="test" class="secondary">Test now</button>
+    </div>
+    <div id="notificationStatus" class="status"></div>
+  </section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+const KEY='do-it.tasks.v1';
+const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+if(!standalone) $('#installCard').style.display='block';
+
+let tasks=JSON.parse(localStorage.getItem(KEY)||'[]');
+function save(){localStorage.setItem(KEY,JSON.stringify(tasks));render();updateBadge();}
+function render(){
+  $('#count').textContent=tasks.filter(t=>!t.done).length;
+  const open=tasks.filter(t=>!t.done).sort((a,b)=>b.created-a.created);
+  $('#tasks').innerHTML=open.length?'': '<div class="empty">Nothing open.</div>';
+  open.forEach(t=>{
+    const el=document.createElement('div'); el.className='task';
+    el.innerHTML='<div class="body"><div class="title"></div><div class="meta"></div></div><button class="secondary">Done</button>';
+    el.querySelector('.title').textContent=t.text;
+    el.querySelector('.meta').textContent='Captured '+new Date(t.created).toLocaleString();
+    el.querySelector('button').onclick=()=>{t.done=true;t.doneAt=Date.now();save()};
+    $('#tasks').appendChild(el);
+  });
+}
+async function updateBadge(){const n=tasks.filter(t=>!t.done).length;try{n?await navigator.setAppBadge(n):await navigator.clearAppBadge()}catch{}}
+$('#add').onclick=()=>{const text=$('#capture').value.trim();if(!text)return;tasks.push({id:crypto.randomUUID(),text,created:Date.now(),done:false});$('#capture').value='';$('#captureStatus').textContent='Captured.';save();setTimeout(()=>$('#captureStatus').textContent='',1200)};
+
+$('#voice').onclick=()=>{
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){$('#captureStatus').textContent='Voice capture is unavailable here; use iPhone dictation.';return}
+ const r=new SR();r.lang='en-US';r.interimResults=false;r.onresult=e=>{$('#capture').value=e.results[0][0].transcript};r.onerror=()=>{$('#captureStatus').textContent='Voice capture failed.'};r.start();
+};
+
+let reg;
+async function register(){if('serviceWorker'in navigator){reg=await navigator.serviceWorker.register('./sw.js'); await navigator.serviceWorker.ready}}
+register();
+
+$('#notify').onclick=async()=>{
+ if(!standalone){$('#notificationStatus').textContent='Add Do It to your Home Screen first, then open it there.';return}
+ if(!('Notification'in window)){ $('#notificationStatus').textContent='Notifications are unavailable.';return}
+ const p=await Notification.requestPermission();
+ $('#notificationStatus').textContent=p==='granted'?'Notifications enabled.':'Notification permission not enabled.';
+};
+$('#test').onclick=async()=>{
+ if(!standalone){$('#notificationStatus').textContent='Open the Home Screen app first.';return}
+ if(Notification.permission!=='granted'){const p=await Notification.requestPermission();if(p!=='granted'){return}}
+ reg=reg||await navigator.serviceWorker.ready;
+ await reg.showNotification('Do It',{body:'This is what your Do It notifications look like.',tag:'do-it-test',icon:'./icon.svg',badge:'./icon.svg',data:{url:'./'}});
+ $('#notificationStatus').textContent='Sent.';
+};
+navigator.serviceWorker?.addEventListener('controllerchange',()=>location.reload());
+render();updateBadge();
+</script></body></html>
