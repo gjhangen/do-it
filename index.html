@@ -55,6 +55,7 @@
       <button id="test" class="secondary">Test now</button>
     </div>
     <div id="notificationStatus" class="status"></div>
+    <textarea id="enrollCode" style="display:none;margin-top:10px;font-size:12px;min-height:90px" readonly></textarea>
   </section>
 </main>
 <script>
@@ -88,14 +89,36 @@ $('#voice').onclick=()=>{
 };
 
 let reg;
+const VAPID_PUBLIC='BCC_3R7RnRRwHHc0zHUcwp-mK_eIMWN_wui3SdssRQetlsSF2wHZ8jCQRL-g_y-YJ-1XzjexWw_3BZrbk-cqJf8';
+function b64ToBytes(s){
+  const pad='='.repeat((4-s.length%4)%4);
+  const b64=(s+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b64);
+  return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)));
+}
 async function register(){if('serviceWorker'in navigator){reg=await navigator.serviceWorker.register('./sw.js'); await navigator.serviceWorker.ready}}
 register();
 
 $('#notify').onclick=async()=>{
  if(!standalone){$('#notificationStatus').textContent='Add Do It to your Home Screen first, then open it there.';return}
- if(!('Notification'in window)){ $('#notificationStatus').textContent='Notifications are unavailable.';return}
+ if(!('Notification'in window)||!('PushManager'in window)){ $('#notificationStatus').textContent='Push notifications are unavailable.';return}
  const p=await Notification.requestPermission();
- $('#notificationStatus').textContent=p==='granted'?'Notifications enabled.':'Notification permission not enabled.';
+ if(p!=='granted'){ $('#notificationStatus').textContent='Notification permission not enabled.';return}
+ reg=reg||await navigator.serviceWorker.ready;
+ let sub=await reg.pushManager.getSubscription();
+ if(!sub){
+   sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToBytes(VAPID_PUBLIC)});
+ }
+ const code=JSON.stringify(sub.toJSON());
+ $('#enrollCode').value=code;
+ try{
+   await navigator.clipboard.writeText(code);
+   $('#enrollCode').style.display='none';
+   $('#notificationStatus').textContent='Enabled. Enrollment code copied — paste it into ChatGPT once.';
+ }catch{
+   $('#enrollCode').style.display='block';
+   $('#notificationStatus').textContent='Enabled. Copy the code below and paste it into ChatGPT once.';
+ }
 };
 $('#test').onclick=async()=>{
  if(!standalone){$('#notificationStatus').textContent='Open the Home Screen app first.';return}
